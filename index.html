@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Idol Phone Simulator</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-tap-highlight-color: transparent; }
+    html, body { width: 100%; height: 100%; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #000; color: #1c1c1e; }
+    
+    #phone-screen {
+      position: absolute; inset: 0; width: 100vw; height: 100dvh; background: #fdfbf7;
+      background-image: radial-gradient(#e5e0d8 1px, transparent 1px); background-size: 20px 20px;
+      display: flex; flex-direction: column; justify-content: space-between; overflow: hidden;
+    }
+
+    .status-bar {
+      height: 40px; padding: 0 20px; display: flex; justify-content: space-between; align-items: center;
+      font-size: 13px; font-weight: 600; z-index: 100; flex-shrink: 0;
+    }
+    .dynamic-island {
+      position: absolute; top: 6px; left: 50%; transform: translateX(-50%);
+      width: 110px; height: 26px; background: #000; border-radius: 20px; z-index: 101;
+      display: flex; align-items: center; justify-content: center; color: #fff; font-size: 11px; gap: 4px; cursor: pointer;
+    }
+
+    /* 鎖屏介面 (修復重疊) */
+    #lock-screen {
+      position: absolute; inset: 0; background: rgba(255, 255, 255, 0.94); backdrop-filter: blur(25px); -webkit-backdrop-filter: blur(25px);
+      z-index: 999; display: flex; flex-direction: column; align-items: center; justify-content: space-around;
+      padding: 30px 20px; transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    #lock-screen.unlocked { transform: translateY(-100%); pointer-events: none; }
+    
+    .lock-header { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+    .lock-time { font-size: 56px; font-weight: 200; line-height: 1; }
+    .lock-date { font-size: 15px; color: #555; font-weight: 500; }
+
+    .keypad-container { display: flex; flex-direction: column; align-items: center; width: 100%; }
+    .passcode-dots { display: flex; gap: 12px; margin-bottom: 20px; }
+    .dot { width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid #333; transition: all 0.2s; }
+    .dot.filled { background: #333; }
+
+    .keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px 20px; width: 250px; }
+    .key-btn {
+      width: 64px; height: 64px; border-radius: 50%; background: rgba(0,0,0,0.06);
+      display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 400; margin: 0 auto; cursor: pointer;
+    }
+    .key-btn:active { background: rgba(0,0,0,0.18); }
+    .lock-tip { font-size: 11px; color: #888; text-align: center; margin-top: 10px; }
+
+    /* 主畫面 Apps */
+    .app-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px 10px; padding: 16px; z-index: 10; flex: 1; overflow-y: auto; }
+    .widget-row { grid-column: span 4; display: flex; gap: 10px; }
+    .widget {
+      flex: 1; background: #fff; border-radius: 20px; padding: 12px;
+      box-shadow: 0 6px 16px rgba(0,0,0,0.04); border: 1px solid rgba(0,0,0,0.06); height: 120px;
+      display: flex; flex-direction: column; justify-content: space-between;
+    }
+
+    .app-icon { display: flex; flex-direction: column; align-items: center; gap: 5px; cursor: pointer; }
+    .icon-box {
+      width: 56px; height: 56px; border-radius: 14px; display: flex; align-items: center; justify-content: center;
+      font-size: 26px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); position: relative;
+    }
+    .app-name { font-size: 11px; font-weight: 500; color: #444; }
+    .badge { position: absolute; top: -3px; right: -3px; background: #ff3b30; color: #fff; border-radius: 10px; font-size: 10px; padding: 1px 5px; font-weight: bold; }
+
+    .dock {
+      margin: 10px 16px 16px 16px; background: rgba(255, 255, 255, 0.45); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+      border-radius: 28px; padding: 10px 16px; display: flex; justify-content: space-around; border: 1px solid rgba(255,255,255,0.6); flex-shrink: 0;
+    }
+
+    /* 彈窗 Apps */
+    .app-modal {
+      position: absolute; inset: 0; background: #fff; z-index: 200; display: flex; flex-direction: column;
+      transform: translateY(100%); transition: transform 0.3s cubic-bezier(0.1, 0.9, 0.2, 1);
+    }
+    .app-modal.active { transform: translateY(0); }
+    .modal-header {
+      height: 52px; padding: 0 16px; border-bottom: 1px solid #eee; display: flex; align-items: center; justify-content: space-between;
+      font-weight: 600; background: #f8f8f8; flex-shrink: 0;
+    }
+    .back-btn { font-size: 24px; cursor: pointer; color: #007aff; }
+
+    .chat-body { flex: 1; overflow-y: auto; padding: 16px; background: #b2c7da; display: flex; flex-direction: column; gap: 12px; }
+    .msg-bubble { max-width: 75%; padding: 10px 14px; border-radius: 14px; font-size: 14px; line-height: 1.4; word-break: break-word; }
+    .msg-left { background: #fff; align-self: flex-start; border-top-left-radius: 2px; }
+    .msg-right { background: #ffe812; align-self: flex-end; border-top-right-radius: 2px; }
+    .chat-input-zone { padding: 10px 12px; background: #fff; display: flex; gap: 8px; border-top: 1px solid #ddd; flex-shrink: 0; }
+    .chat-input-zone input { flex: 1; border: 1px solid #ddd; border-radius: 20px; padding: 8px 14px; outline: none; font-size: 14px; }
+    .send-btn { background: #ffe812; border: none; padding: 8px 16px; border-radius: 20px; font-weight: bold; cursor: pointer; }
+
+    .contact-bar { display: flex; gap: 8px; padding: 8px 12px; background: #fff; overflow-x: auto; border-bottom: 1px solid #eee; flex-shrink: 0; }
+    .contact-chip { padding: 6px 12px; background: #f0f0f0; border-radius: 16px; font-size: 12px; white-space: nowrap; cursor: pointer; }
+    .contact-chip.active { background: #ffe812; font-weight: bold; }
+  </style>
+</head>
+<body>
+
+  <div id="phone-screen">
+    <div class="status-bar">
+      <span>14:30</span>
+      <div class="dynamic-island" onclick="showAffinityInfo()">🐥 Jimin Phone</div>
+      <span>5G 🔋85%</span>
+    </div>
+
+    <!-- 鎖屏 -->
+    <div id="lock-screen">
+      <div class="lock-header">
+        <div class="lock-time">14:30</div>
+        <div class="lock-date">星期三 10月28日</div>
+      </div>
+      
+      <div class="keypad-container">
+        <div class="passcode-dots" id="dots">
+          <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+        </div>
+        <div class="keypad">
+          <div class="key-btn" onclick="pressKey('1')">1</div>
+          <div class="key-btn" onclick="pressKey('2')">2</div>
+          <div class="key-btn" onclick="pressKey('3')">3</div>
+          <div class="key-btn" onclick="pressKey('4')">4</div>
+          <div class="key-btn" onclick="pressKey('5')">5</div>
+          <div class="key-btn" onclick="pressKey('6')">6</div>
+          <div class="key-btn" onclick="pressKey('7')">7</div>
+          <div class="key-btn" onclick="pressKey('8')">8</div>
+          <div class="key-btn" onclick="pressKey('9')">9</div>
+          <div class="key-btn" style="grid-column: 2" onclick="pressKey('0')">0</div>
+        </div>
+        <div class="lock-tip">輸入智旻生日密碼解鎖 (1013)</div>
+      </div>
+    </div>
+
+    <!-- 主桌面 Apps -->
+    <div class="app-grid">
+      <div class="widget-row">
+        <div class="widget">
+          <span style="color:#ff3b30; font-size:11px; font-weight:bold;">星期三 28</span>
+          <div style="font-size: 14px; font-weight:bold; margin-top:2px;">19:00 新單曲會議</div>
+          <span style="font-size:11px; color:#888;">HYBE Studio 3</span>
+        </div>
+        <div class="widget" onclick="openApp('kakao')">
+          <span style="color:#e6b800; font-size:11px; font-weight:bold;">KakaoTalk</span>
+          <div style="font-size: 11px; font-weight:bold; margin-top:2px;" id="widget-msg">智旻：記得聽日約定...</div>
+          <span style="font-size:11px; color:#ff3b30;">❤️ 好感度: <span id="aff-jimin">10</span></span>
+        </div>
+      </div>
+
+      <div class="app-icon" onclick="openApp('kakao')">
+        <div class="icon-box" style="background: #ffe812; color: #3c1e1e;">💬<div class="badge">3</div></div>
+        <div class="app-name">KakaoTalk</div>
+      </div>
+
+      <div class="app-icon" onclick="openApp('gallery')">
+        <div class="icon-box" style="background: linear-gradient(135deg, #ff9a9e, #fecfef);">🖼️</div>
+        <div class="app-name">相冊照片</div>
+      </div>
+
+      <div class="app-icon" onclick="openApp('call')">
+        <div class="icon-box" style="background: #34c759; color:#fff;">📞</div>
+        <div class="app-name">語音通話</div>
+      </div>
+
+      <div class="app-icon" onclick="openApp('youtube')">
+        <div class="icon-box" style="background: #ff0000; color:#fff;">▶️</div>
+        <div class="app-name">YouTube</div>
+      </div>
+    </div>
+
+    <!-- Dock -->
+    <div class="dock">
+      <div class="icon-box" style="background: #34c759; color:#fff;" onclick="openApp('call')">📞</div>
+      <div class="icon-box" style="background: #ffe812; color: #3c1e1e;" onclick="openApp('kakao')">💬</div>
+      <div class="icon-box" style="background: linear-gradient(45deg, #f09433, #bc1888); color:#fff;" onclick="alert('Instagram 載入中...')">📷</div>
+    </div>
+
+    <!-- KakaoTalk 聊天視窗 -->
+    <div id="modal-kakao" class="app-modal">
+      <div class="modal-header">
+        <span class="back-btn" onclick="closeApp('kakao')">‹</span>
+        <span id="chat-title">朴智旻 🐥 (❤️ 10)</span>
+        <span>⚙️</span>
+      </div>
+      <div class="contact-bar">
+        <div class="contact-chip active" onclick="switchMember('jimin', event)">智旻 🐥</div>
+        <div class="contact-chip" onclick="switchMember('taehyung', event)">泰亨 🐯</div>
+        <div class="contact-chip" onclick="switchMember('jungkook', event)">柾國 🐰</div>
+      </div>
+      <div class="chat-body" id="chat-body">
+        <div class="msg-bubble msg-left">收工未呀？記得食晚飯呀，辛苦你啦 🐥❤️</div>
+      </div>
+      <div class="chat-input-zone">
+        <input type="text" id="chat-input" placeholder="發送訊息..." onkeypress="if(event.key==='Enter') sendMsg()">
+        <button class="send-btn" onclick="sendMsg()">發送</button>
+      </div>
+    </div>
+
+    <!-- 相冊視窗 -->
+    <div id="modal-gallery" class="app-modal">
+      <div class="modal-header">
+        <span class="back-btn" onclick="closeApp('gallery')">‹</span>
+        <span>BTS 獨家相冊</span>
+        <span></span>
+      </div>
+      <div style="padding: 15px; overflow-y: auto; display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;">
+        <img src="https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400" style="width:100%; border-radius:12px;">
+        <img src="https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400" style="width:100%; border-radius:12px;">
+      </div>
+    </div>
+
+    <!-- 通話視窗 -->
+    <div id="modal-call" class="app-modal" style="background: #111; color: #fff;">
+      <div class="modal-header" style="background: #111; border:none; color:#fff;">
+        <span class="back-btn" onclick="closeApp('call')">‹</span>
+        <span>語音通話</span>
+        <span></span>
+      </div>
+      <div style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px;">
+        <div style="width:100px; height:100px; border-radius:50%; background:#ffe812; display:flex; align-items:center; justify-content:center; font-size:40px;">🐥</div>
+        <h2>朴智旻</h2>
+        <p style="color:#aaa;">正在通話中 00:15...</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentPasscode = "";
+    let currentMember = 'jimin';
+    const affinity = { jimin: 10, taehyung: 10, jungkook: 10 };
+
+    function pressKey(num) {
+      if (currentPasscode.length < 4) {
+        currentPasscode += num;
+        updateDots();
+      }
+      if (currentPasscode.length === 4) {
+        if (currentPasscode === "1013") {
+          document.getElementById("lock-screen").classList.add("unlocked");
+        } else {
+          alert("密碼錯誤！(提示：智旻生日 1013)");
+          currentPasscode = "";
+          updateDots();
+        }
+      }
+    }
+
+    function updateDots() {
+      const dots = document.querySelectorAll('.dot');
+      dots.forEach((dot, idx) => {
+        if (idx < currentPasscode.length) dot.classList.add('filled');
+        else dot.classList.remove('filled');
+      });
+    }
+
+    function openApp(id) { document.getElementById('modal-' + id).classList.add('active'); }
+    function closeApp(id) { document.getElementById('modal-' + id).classList.remove('active'); }
+
+    function switchMember(name, evt) {
+      currentMember = name;
+      document.querySelectorAll('.contact-chip').forEach(c => c.classList.remove('active'));
+      evt.target.classList.add('active');
+      const names = { jimin: '朴智旻 🐥', taehyung: '金泰亨 🐯', jungkook: '田柾國 🐰' };
+      document.getElementById('chat-title').innerText = `${names[name]} (❤️ ${affinity[name]})`;
+    }
+
+    function sendMsg() {
+      const input = document.getElementById('chat-input');
+      const text = input.value.trim();
+      if (!text) return;
+
+      const body = document.getElementById('chat-body');
+      body.innerHTML += `<div class="msg-bubble msg-right">${text}</div>`;
+      input.value = '';
+      body.scrollTop = body.scrollHeight;
+
+      let delay = 1800;
+      let reply = "";
+
+      if (currentMember === 'jimin') {
+        delay = 1800;
+        reply = "我收到你訊息喇！今日練舞雖然辛苦，但見到你留言心情即刻好返晒 🐥❤️";
+      } else if (currentMember === 'taehyung') {
+        delay = 4500;
+        reply = "啊...我剛才睇緊天上的雲思考問題，忘記咗回覆你！你講得好有道理呀 🐯";
+      } else if (currentMember === 'jungkook') {
+        delay = 6000;
+        reply = "打字好慢呀！不如我哋陣間去食烤肉/運動見面傾啦！🍖🐰";
+      }
+
+      setTimeout(() => {
+        body.innerHTML += `<div class="msg-bubble msg-left">${reply}</div>`;
+        body.scrollTop = body.scrollHeight;
+        
+        affinity[currentMember] += 2;
+        document.getElementById('aff-jimin').innerText = affinity[currentMember];
+        
+        if ('speechSynthesis' in window) {
+          const utter = new SpeechSynthesisUtterance(reply);
+          utter.lang = 'zh-HK';
+          window.speechSynthesis.speak(utter);
+        }
+      }, delay);
+    }
+
+    function showAffinityInfo() {
+      alert(`偶像好感度一覽：\n🐥 智旻: ${affinity.jimin}\n🐯 泰亨: ${affinity.taehyung}\n🐰 柾國: ${affinity.jungkook}`);
+    }
+  </script>
+</body>
+</html>
